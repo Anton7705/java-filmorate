@@ -15,7 +15,7 @@ import java.util.Map;
 @Slf4j
 public class FilmService {
 
-    private final static LocalDate EARLIEST_RELEASE_DATE = LocalDate.of(1895, 12, 28);
+    private static final LocalDate EARLIEST_RELEASE_DATE = LocalDate.of(1895, 12, 28);
     private static final int MAX_DESCRIPTION_LENGTH = 200;
     private Map<Long, Film> films = new HashMap<>();
     private long count = 1;
