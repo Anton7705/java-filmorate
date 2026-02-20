@@ -31,10 +31,10 @@ public class FilmController {
         return filmService.create(film);
     }
 
-    @PutMapping("/{id}")
+    @PutMapping
     @ResponseStatus(HttpStatus.OK)
-    public Film updateFilm(@PathVariable long id, @RequestBody Film film) {
-        log.info("Запрос на обновление фильма с id={}", id);
-        return filmService.update(id, film);
+    public Film updateFilm(@RequestBody Film film) {
+        log.info("Запрос на обновление фильма с id={}", film.getId());
+        return filmService.update(film.getId(), film);
     }
 }

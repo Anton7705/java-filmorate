@@ -31,11 +31,11 @@ public class UserController {
         return userService.create(user);
     }
 
-    @PutMapping("/{id}")
+    @PutMapping
     @ResponseStatus(HttpStatus.OK)
-    public User updateUser(@PathVariable long id, @RequestBody User user) {
-        log.info("Запрос на обновление пользователя с id={}", id);
-        return userService.update(id, user);
+    public User updateUser(@RequestBody User user) {
+        log.info("Запрос на обновление пользователя с id={}", user.getId());
+        return userService.update(user.getId(), user);
     }
 
 }
