@@ -2,6 +2,7 @@ package ru.yandex.practicum.filmorate.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.Film;
 
@@ -16,7 +17,6 @@ import java.util.Map;
 public class FilmService {
 
     private static final LocalDate EARLIEST_RELEASE_DATE = LocalDate.of(1895, 12, 28);
-    private static final int MAX_DESCRIPTION_LENGTH = 200;
     private Map<Long, Film> films = new HashMap<>();
     private long count = 1;
 
@@ -35,7 +35,8 @@ public class FilmService {
 
     public Film update(long id, Film updatedFilm) {
         if (!films.containsKey(id)) {
-            throw new ValidationException("Отсутствует фильм с id=" + id);
+            log.warn("Фильм с id={} не найден", id);
+            throw new NotFoundException("Отсутствует фильм с id=" + id);
         }
 
         validateFilm(updatedFilm);
@@ -46,30 +47,9 @@ public class FilmService {
     }
 
     private void validateFilm(Film film) {
-        if (film.getName() == null || film.getName().isBlank()) {
-            log.warn("Пустое название фильма");
-            throw new ValidationException("Название не может быть пустым");
-        }
-        if (film.getDescription() == null) {
-            log.warn("Отсутсвует описание фильма");
-            throw new ValidationException("Описание не может быть пустым");
-        }
-        if (film.getDescription().length() > MAX_DESCRIPTION_LENGTH) {
-            log.warn("Слишком длинное описание фильма");
-            throw new ValidationException("Описание не может быть длиннее 200 символов");
-        }
-
-        if (film.getReleaseDate() == null) {
-            log.warn("Отсутсвует дата релиза фильма");
-            throw new ValidationException("Дата релиза не может быть пуста");
-        }
-        if (film.getReleaseDate().isBefore(EARLIEST_RELEASE_DATE)) {
+        if (film.getReleaseDate().isBefore(EARLIEST_RELEASE_DATE) || film.getReleaseDate().isAfter(LocalDate.now())) {
             log.warn("Некорректная дата релиза {}", film.getReleaseDate());
-            throw new ValidationException("Дата релиза не может быть раньше 28 декабря 1895 года");
-        }
-        if (film.getDuration() <= 0) {
-            log.warn("Некорректная продолжительность фильма: {}", film.getDuration());
-            throw new ValidationException("Продолжительность должна быть положительной");
+            throw new ValidationException("Дата релиза не может быть раньше 28 декабря 1895 года и позже текущей даты");
         }
     }
 }
