@@ -17,7 +17,7 @@ import java.util.Map;
 public class FilmService {
 
     private static final LocalDate EARLIEST_RELEASE_DATE = LocalDate.of(1895, 12, 28);
-    private Map<Long, Film> films = new HashMap<>();
+    private final Map<Long, Film> films = new HashMap<>();
     private long count = 1;
 
     public List<Film> getFilms() {
