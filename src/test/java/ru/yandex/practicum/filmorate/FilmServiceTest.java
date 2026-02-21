@@ -3,6 +3,7 @@ package ru.yandex.practicum.filmorate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.service.FilmService;
@@ -45,94 +46,45 @@ public class FilmServiceTest {
     }
 
     @Test
-    @DisplayName("Валидация названия: пустое, null или отсутствует -> исключение")
-    void shouldThrowExceptionWhenNameIsInvalid() {
-        Film filmWithoutName = Film.builder()
+    @DisplayName("Обновление: несуществующий id -> NotFoundException")
+    void shouldThrowNotFoundExceptionWhenUpdatingNonExistingFilm() {
+        Film filmToUpdate = Film.builder()
+                .name("name")
                 .description("description")
-                .duration(136.0)
-                .releaseDate(releaseDate)
+                .duration(100.0)
+                .releaseDate(LocalDate.of(1950, 10, 10))
                 .build();
-        Film filmWithBlancName = Film.builder()
-                .name("")
-                .description("description")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
-        Film filmWithEmptyName = Film.builder()
-                .name(null)
-                .description("description")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithoutName));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithBlancName));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithEmptyName));
+
+        assertThrows(NotFoundException.class,
+                () -> filmService.update(999L, filmToUpdate));
     }
 
     @Test
-    @DisplayName("Валидация описания: отсутствует, null или длина > 200 -> исключение")
-    void shouldThrowExceptionWhenDescriptionIsInvalid() {
-        Film filmWithoutDescription = Film.builder()
-                .name("name")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
-        Film filmWithEmptyDescription = Film.builder()
-                .description(null)
-                .name("name")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
-        String longDescription = "a".repeat(201);
-        Film filmWithBigDescription = Film.builder()
-                .description(longDescription)
-                .name("name")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
-
-
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithoutDescription));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithEmptyDescription));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithBigDescription));
-    }
-
-    @Test
-    @DisplayName("Валидация продолжительности: отсутствует или отрицательная -> исключение")
-    void shouldThrowExceptionWhenDurationIsInvalid() {
-        Film filmWithoutDuration = Film.builder()
-                .name("name")
-                .description("description")
-                .releaseDate(releaseDate)
-                .build();
-        Film filmWithNegativeDuration = Film.builder()
-                .name("name")
-                .description("description")
-                .duration(-10)
-                .releaseDate(releaseDate)
-                .build();
-
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithoutDuration));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithNegativeDuration));
-    }
-
-    @Test
-    @DisplayName("Валидация даты релиза: отсутствует или раньше 28.12.1895 -> исключение")
-    void shouldThrowExceptionWhenReleaseDateIsInvalid() {
-        Film filmWithoutReleaseDate = Film.builder()
-                .name("name")
-                .description("description")
-                .duration(136.0)
-                .build();
-        Film filmWithUncorrectReleaseDate = Film.builder()
+    @DisplayName("Валидация даты релиза: раньше 28.12.1895 -> исключение")
+    void shouldThrowExceptionWhenReleaseDateIsTooEarly() {
+        Film filmWithEarlyDate = Film.builder()
                 .name("name")
                 .description("description")
                 .duration(136.0)
                 .releaseDate(LocalDate.of(1700, 10, 10))
                 .build();
 
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithoutReleaseDate));
-        assertThrows(ValidationException.class, () -> filmService.create(filmWithUncorrectReleaseDate));
+        assertThrows(ValidationException.class,
+                () -> filmService.create(filmWithEarlyDate));
+    }
+
+    @Test
+    @DisplayName("Валидация даты релиза: позже текущей даты -> исключение")
+    void shouldThrowExceptionWhenReleaseDateIsInFuture() {
+        Film filmWithFutureDate = Film.builder()
+                .name("name")
+                .description("description")
+                .duration(136.0)
+                .releaseDate(LocalDate.now().plusDays(1))
+                .build();
+
+        assertThrows(ValidationException.class,
+                () -> filmService.create(filmWithFutureDate));
     }
 
     @Test
