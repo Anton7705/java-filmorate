@@ -2,11 +2,9 @@ package ru.yandex.practicum.filmorate.storage;
 
 import org.springframework.stereotype.Component;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.User;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Component
 public class InMemoryFilmStorage implements FilmStorage {
@@ -23,7 +21,14 @@ public class InMemoryFilmStorage implements FilmStorage {
     }
 
     @Override
-    public boolean hasFilmWithId(long id) {
-        return films.containsKey(id);
+    public Optional<Film> findById(long id) {
+        return Optional.ofNullable(films.get(id));
+    }
+
+    @Override
+    public List<Film> getMostPopular(int count) {
+        return getAll().stream()
+                .sorted(Comparator.comparingInt(Film::likesCount).reversed())
+                .limit(count).toList();
     }
 }

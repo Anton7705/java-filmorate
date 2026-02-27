@@ -7,10 +7,7 @@ import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -18,10 +15,15 @@ import java.util.Map;
 public class UserService {
 
     private final UserStorage userStorage;
+    private final ValidationService validationService;
     private long count = 1;
 
     public List<User> getUsers() {
         return userStorage.getAll();
+    }
+
+    public User getUser(long id) {
+        return validationService.getUserOrThrow(id);
     }
 
     public User create(User user) {
@@ -33,16 +35,51 @@ public class UserService {
     }
 
     public User update(long id, User updatedUser) {
-        if (!userStorage.hasUserWithId(id)) {
-            log.warn("Пользователь с id={} не найден", id);
-            throw new NotFoundException("Отсутствует пользователь с id=" + id);
-        }
+        validationService.getUserOrThrow(id);
 
         setNameFromLoginIfBlank(updatedUser);
         updatedUser.setId(id);
         userStorage.save(updatedUser);
         log.debug("Пользователь успешно обновлен");
         return updatedUser;
+    }
+
+    public void addFriend(long id, long friendId) {
+        User user = validationService.getUserOrThrow(id);
+        User friend = validationService.getUserOrThrow(friendId);
+        user.addFriend(friend);
+        friend.addFriend(user);
+        userStorage.save(user);
+        userStorage.save(friend);
+        log.debug("Пользователь c id {} и {} теперь друзья", id, friendId);
+    }
+
+    public void deleteFriend(long id, long friendId) {
+        User user = validationService.getUserOrThrow(id);
+        User friend = validationService.getUserOrThrow(friendId);
+        user.deleteFriend(friend);
+        friend.deleteFriend(user);
+        userStorage.save(user);
+        userStorage.save(friend);
+        log.debug("Пользователь c id {} и {} больше не друзья", id, friendId);
+    }
+
+    public List<User> getAllUsersFriends(long id) {
+        User user = validationService.getUserOrThrow(id);
+        List<User> friends = userStorage.getAllFriends(user);
+        log.debug("Получен список друзей пользователя {}", id);
+        return friends;
+    }
+
+    public List<User> getAllUsersCommonFriends(long id, long otherId) {
+        User user = validationService.getUserOrThrow(id);
+        User otherUser = validationService.getUserOrThrow(otherId);
+        List<Long> ids = user.getCommonFriendsIds(otherUser);
+        log.debug("Получен список общих друзей пользователя {} с пользователем", id);
+        if (ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return userStorage.getListOfUsers(ids);
     }
 
     private void setNameFromLoginIfBlank(User user) {

@@ -6,10 +6,15 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Data
 @Builder
+@Slf4j
 public class Film {
     private long id;
 
@@ -24,4 +29,21 @@ public class Film {
 
     @Positive(message = "Продолжительность должна быть положительной")
     private double duration;
+
+    private final Set<Long> likes = new HashSet<>();
+
+    public void addLike(long userId) {
+        likes.add(userId);
+    }
+
+    public void removeLike(long userId) {
+        if (!likes.contains(userId)) {
+            log.debug("Попытка удалить лайк с фильма, на котором его не было");
+        }
+        likes.remove(userId);
+    }
+
+    public int likesCount() {
+        return likes.size();
+    }
 }

@@ -6,6 +6,11 @@ import org.junit.jupiter.api.Test;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.service.UserService;
+import ru.yandex.practicum.filmorate.service.ValidationService;
+import ru.yandex.practicum.filmorate.storage.FilmStorage;
+import ru.yandex.practicum.filmorate.storage.InMemoryFilmStorage;
+import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
+import ru.yandex.practicum.filmorate.storage.UserStorage;
 
 import java.time.LocalDate;
 
@@ -19,7 +24,10 @@ class UserServiceTest {
 
     @BeforeEach
     void setup() {
-        userService = new UserService();
+        FilmStorage filmStorage = new InMemoryFilmStorage();
+        UserStorage userStorage = new InMemoryUserStorage();
+        ValidationService validationService = new ValidationService(userStorage, filmStorage);
+        userService = new UserService(userStorage, validationService);
         correctUser = User.builder()
                 .email("mail@mail.ru")
                 .login("login")
