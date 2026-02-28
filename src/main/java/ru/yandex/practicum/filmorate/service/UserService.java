@@ -3,6 +3,7 @@ package ru.yandex.practicum.filmorate.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
@@ -46,8 +47,16 @@ public class UserService {
     public void addFriend(long id, long friendId) {
         User user = validationService.getUserOrThrow(id);
         User friend = validationService.getUserOrThrow(friendId);
-        user.addFriend(friend);
-        friend.addFriend(user);
+        if (id == friendId) {
+            log.warn("Попытка добавить самого себя в друзья");
+            throw new ValidationException("Нельзя добавить самого себя в друзья");
+        }
+        if (user.getFriendsIds().contains(friendId) || friend.getFriendsIds().contains(id)) {
+            log.warn("Попытка добавить одного и того же пользователя в друзья дважды");
+            throw new ValidationException("Пользователи уже друзья");
+        }
+        user.addFriendId(friendId);
+        friend.addFriendId(id);
         userStorage.save(user);
         userStorage.save(friend);
         log.debug("Пользователь c id {} и {} теперь друзья", id, friendId);
@@ -56,8 +65,13 @@ public class UserService {
     public void deleteFriend(long id, long friendId) {
         User user = validationService.getUserOrThrow(id);
         User friend = validationService.getUserOrThrow(friendId);
-        user.deleteFriend(friend);
-        friend.deleteFriend(user);
+
+        if (!user.getFriendsIds().contains(friendId) || !friend.getFriendsIds().contains(id)) {
+            log.debug("Попытка разорвать дружбу между {} и {} - операция проигнорирована", id, friendId);
+            return;
+        }
+        user.removeFriendId(friendId);
+        friend.removeFriendId(id);
         userStorage.save(user);
         userStorage.save(friend);
         log.debug("Пользователь c id {} и {} больше не друзья", id, friendId);
@@ -71,14 +85,20 @@ public class UserService {
     }
 
     public List<User> getAllUsersCommonFriends(long id, long otherId) {
+        if (id == otherId) {
+            log.warn("Попытка запросить общих друзей у самого себя");
+            throw new ValidationException("Нельзя запросить общих друзей у самого себя");
+        }
         User user = validationService.getUserOrThrow(id);
         User otherUser = validationService.getUserOrThrow(otherId);
-        List<Long> ids = user.getCommonFriendsIds(otherUser);
+        Set<Long> setOfId = new HashSet<>(user.getFriendsIds());
+        setOfId.retainAll(otherUser.getFriendsIds());
+        List<User> commonFriends = userStorage.getListOfUsers(new ArrayList<>(setOfId));
         log.debug("Получен список общих друзей пользователя {} с пользователем", id);
-        if (ids.isEmpty()) {
+        if (commonFriends.isEmpty()) {
             return Collections.emptyList();
         }
-        return userStorage.getListOfUsers(ids);
+        return commonFriends;
     }
 
     private void setNameFromLoginIfBlank(User user) {

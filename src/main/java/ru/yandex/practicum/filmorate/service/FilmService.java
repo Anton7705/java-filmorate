@@ -25,6 +25,10 @@ public class FilmService {
     }
 
     public List<Film> getMostPopularFilms(int count) {
+        if (count <= 0) {
+            log.warn("Запрошено некорректное количество фильмов: {}", count);
+            throw new ValidationException("Количество фильмов должно быть положительным");
+        }
         return filmStorage.getMostPopular(count);
     }
 
