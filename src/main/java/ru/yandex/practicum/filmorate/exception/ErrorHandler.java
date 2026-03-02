@@ -38,4 +38,14 @@ public class ErrorHandler {
         log.error("Ошибка валидации @Valid: {}", message);
         return new ErrorResponse("Ошибка валидации", message);
     }
+
+    @ExceptionHandler
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ErrorResponse handleInternalServerError(final Throwable e) {
+        log.error("Непредвиденная ошибка {}", e.getMessage(), e);
+        return new ErrorResponse(
+                "Внутренняя ошибка сервера",
+                "Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже."
+        );
+    }
 }
