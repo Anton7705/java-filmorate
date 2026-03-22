@@ -3,55 +3,79 @@ package ru.yandex.practicum.filmorate.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.jdbc.Sql;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.Genre;
+import ru.yandex.practicum.filmorate.model.Mpa;
 import ru.yandex.practicum.filmorate.model.User;
-import ru.yandex.practicum.filmorate.storage.FilmStorage;
-import ru.yandex.practicum.filmorate.storage.InMemoryFilmStorage;
-import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
-import ru.yandex.practicum.filmorate.storage.UserStorage;
+import ru.yandex.practicum.filmorate.storage.db.*;
+import ru.yandex.practicum.filmorate.storage.db.rowmapper.*;
 
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class FilmServiceTest {
+@JdbcTest
+@AutoConfigureTestDatabase
+@Sql(scripts = {"/schema.sql", "/data.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+class FilmServiceTest {
 
-    private static FilmService filmService;
-    private static Film correctFilm;
-    private UserStorage userStorage;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private FilmService filmService;
+    private ValidationService validationService;
+    private FilmDbStorage filmStorage;
+    private UserDbStorage userStorage;
+    private MpaDbStorage mpaStorage;
+    private GenreDbStorage genreStorage;
+
+    private Mpa testMpa;
     private User testUser;
-    private static LocalDate releaseDate = LocalDate.of(2024, 9, 10);
+    private Film correctFilm;
 
     @BeforeEach
-    void setup() {
-        FilmStorage filmStorage = new InMemoryFilmStorage();
-        userStorage = new InMemoryUserStorage();
-        ValidationService validationService = new ValidationService(userStorage, filmStorage);
+    void setUp() {
+        filmStorage = new FilmDbStorage(jdbcTemplate, new FilmRowMapper());
+        userStorage = new UserDbStorage(jdbcTemplate, new UserRowMapper());
+        mpaStorage = new MpaDbStorage(jdbcTemplate, new MpaRowMapper());
+        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper());
+
+        validationService = new ValidationService(userStorage, filmStorage, mpaStorage, genreStorage);
         filmService = new FilmService(filmStorage, validationService);
-        correctFilm = Film.builder()
-                .name("name")
-                .description("description")
-                .duration(136.0)
-                .releaseDate(releaseDate)
-                .build();
+
         testUser = User.builder()
-                .id(1L)
                 .email("test@mail.ru")
                 .login("testlogin")
                 .name("Test User")
                 .birthday(LocalDate.of(1990, 1, 1))
                 .build();
         userStorage.save(testUser);
+
+        testMpa = mpaStorage.get(1).orElseThrow();
+
+        correctFilm = Film.builder()
+                .name("name")
+                .description("description")
+                .duration(136.0)
+                .releaseDate(LocalDate.of(2024, 9, 10))
+                .mpa(testMpa)
+                .build();
     }
 
     @Test
     @DisplayName("Присвоение ID новому фильму")
     void shouldAssignIdWhenCreatingFilm() {
         filmService.create(correctFilm);
-        assertEquals(correctFilm.getId(), 1);
+        assertThat(correctFilm.getId()).isPositive();
     }
 
     @Test
@@ -59,8 +83,31 @@ public class FilmServiceTest {
     void shouldSaveFilmWhenDataIsValid() {
         Film created = filmService.create(correctFilm);
 
-        assertTrue(filmService.getFilms().contains(created));
-        assertEquals(1, filmService.getFilms().size());
+        List<Film> films = filmService.getFilms();
+
+        assertThat(films)
+                .hasSize(1)
+                .first()
+                .satisfies(film -> {
+                    assertThat(film.getId()).isEqualTo(created.getId());
+                    assertThat(film.getName()).isEqualTo("name");
+                    assertThat(film.getGenres()).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("Создание фильма: с жанрами")
+    void shouldSaveFilmWithGenres() {
+        correctFilm.setGenres(List.of(
+                Genre.builder().id(1).build(),
+                Genre.builder().id(2).build()
+        ));
+
+        Film created = filmService.create(correctFilm);
+
+        Film found = filmService.getFilm(created.getId());
+        assertThat(found.getGenres()).hasSize(2);
+        assertThat(found.getGenres()).extracting("id").containsExactly(1, 2);
     }
 
     @Test
@@ -71,6 +118,7 @@ public class FilmServiceTest {
                 .description("description")
                 .duration(100.0)
                 .releaseDate(LocalDate.of(1950, 10, 10))
+                .mpa(testMpa)
                 .build();
 
         assertThrows(NotFoundException.class,
@@ -85,6 +133,7 @@ public class FilmServiceTest {
                 .description("description")
                 .duration(136.0)
                 .releaseDate(LocalDate.of(1700, 10, 10))
+                .mpa(testMpa)
                 .build();
 
         assertThrows(ValidationException.class,
@@ -99,6 +148,7 @@ public class FilmServiceTest {
                 .description("description")
                 .duration(136.0)
                 .releaseDate(LocalDate.now().plusDays(1))
+                .mpa(testMpa)
                 .build();
 
         assertThrows(ValidationException.class,
@@ -108,17 +158,21 @@ public class FilmServiceTest {
     @Test
     @DisplayName("Обновление фильма: данные успешно обновляются")
     void shouldUpdateFilmSuccessfully() {
-        filmService.create(correctFilm);
-        long id = correctFilm.getId();
+        Film created = filmService.create(correctFilm);
+        long id = created.getId();
+
         Film filmToUpdate = Film.builder()
                 .name("NewName")
                 .description("NewDescription")
                 .duration(100.0)
                 .releaseDate(LocalDate.of(1950, 10, 10))
+                .mpa(testMpa)
                 .build();
+
         Film updatedFilm = filmService.update(id, filmToUpdate);
-        assertEquals(filmToUpdate.getName(), updatedFilm.getName());
-        assertEquals(filmToUpdate.getDescription(), updatedFilm.getDescription());
+
+        assertThat(updatedFilm.getName()).isEqualTo("NewName");
+        assertThat(updatedFilm.getDescription()).isEqualTo("NewDescription");
     }
 
     @Test
@@ -128,8 +182,9 @@ public class FilmServiceTest {
 
         filmService.addLikeToFilm(film.getId(), testUser.getId());
 
-        Film updatedFilm = filmService.getFilm(film.getId());
-        assertEquals(1, updatedFilm.likesCount());
+        String sql = "SELECT COUNT(*) FROM likes WHERE film_id = ? AND user_id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, film.getId(), testUser.getId());
+        assertEquals(1, count);
     }
 
     @Test
@@ -140,8 +195,9 @@ public class FilmServiceTest {
         filmService.addLikeToFilm(film.getId(), testUser.getId());
         assertDoesNotThrow(() -> filmService.addLikeToFilm(film.getId(), testUser.getId()));
 
-        Film updatedFilm = filmService.getFilm(film.getId());
-        assertEquals(1, updatedFilm.likesCount());
+        String sql = "SELECT COUNT(*) FROM likes WHERE film_id = ? AND user_id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, film.getId(), testUser.getId());
+        assertThat(count).isEqualTo(1);
     }
 
     @Test
@@ -162,7 +218,7 @@ public class FilmServiceTest {
         filmService.removeLikeFromFilm(film.getId(), testUser.getId());
 
         Film updatedFilm = filmService.getFilm(film.getId());
-        assertEquals(0, updatedFilm.likesCount());
+        assertThat(updatedFilm.likesCount()).isZero();
     }
 
     @Test
@@ -177,27 +233,44 @@ public class FilmServiceTest {
     @DisplayName("Получение популярных фильмов: сортировка по количеству лайков")
     void shouldReturnFilmsSortedByLikesCount() {
         User user2 = User.builder()
-                .id(2L)
                 .email("user2@mail.ru")
                 .login("user2")
                 .name("User Two")
                 .birthday(LocalDate.of(1990, 1, 1))
                 .build();
-
+        userStorage.save(user2);
         User user3 = User.builder()
-                .id(3L)
                 .email("user3@mail.ru")
                 .login("user3")
                 .name("User Three")
-                .birthday(LocalDate.of(1990, 1, 1))
+                .birthday(LocalDate.of(2000, 9, 9))
                 .build();
-
-        userStorage.save(user2);
         userStorage.save(user3);
 
-        Film film1 = filmService.create(Film.builder().name("Film1").description("Desc1").duration(100).releaseDate(LocalDate.now()).build());
-        Film film2 = filmService.create(Film.builder().name("Film2").description("Desc2").duration(100).releaseDate(LocalDate.now()).build());
-        Film film3 = filmService.create(Film.builder().name("Film3").description("Desc3").duration(100).releaseDate(LocalDate.now()).build());
+        Film film1 = Film.builder()
+                .name("name1")
+                .description("Description for 1")
+                .duration(100)
+                .releaseDate(LocalDate.now())
+                .mpa(testMpa)
+                .build();
+        filmService.create(film1);
+        Film film2 = Film.builder()
+                .name("name2")
+                .description("Description for 2")
+                .duration(100)
+                .releaseDate(LocalDate.now())
+                .mpa(testMpa)
+                .build();
+        filmService.create(film2);
+        Film film3 = Film.builder()
+                .name("name3")
+                .description("Description for 3")
+                .duration(100)
+                .releaseDate(LocalDate.now())
+                .mpa(testMpa)
+                .build();
+        filmService.create(film3);
 
         filmService.addLikeToFilm(film2.getId(), testUser.getId());
         filmService.addLikeToFilm(film2.getId(), user2.getId());
@@ -210,26 +283,28 @@ public class FilmServiceTest {
 
         List<Film> popularFilms = filmService.getMostPopularFilms(10);
 
-        assertEquals(3, popularFilms.size());
-        assertEquals(film2.getId(), popularFilms.get(0).getId());
-        assertEquals(film1.getId(), popularFilms.get(1).getId());
-        assertEquals(film3.getId(), popularFilms.get(2).getId());
+        assertThat(popularFilms).hasSize(3);
+        assertThat(popularFilms.get(0).getId()).isEqualTo(film2.getId());
+        assertThat(popularFilms.get(1).getId()).isEqualTo(film1.getId());
+        assertThat(popularFilms.get(2).getId()).isEqualTo(film3.getId());
     }
 
     @Test
-    @DisplayName("Получение популярных фильмов")
+    @DisplayName("Получение популярных фильмов: ограничение количества")
     void shouldRespectCountParameter() {
         for (int i = 1; i <= 5; i++) {
-            Film film = filmService.create(Film.builder()
-                    .name("Film" + i)
-                    .description("Desc" + i)
+            Film film = Film.builder()
+                    .name("name")
+                    .description("Description")
                     .duration(100)
                     .releaseDate(LocalDate.now())
-                    .build());
+                    .mpa(testMpa)
+                    .build();
+            filmService.create(film);
             filmService.addLikeToFilm(film.getId(), testUser.getId());
         }
 
         List<Film> popularFilms = filmService.getMostPopularFilms(3);
-        assertEquals(3, popularFilms.size());
+        assertThat(popularFilms).hasSize(3);
     }
 }

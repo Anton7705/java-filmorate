@@ -1,7 +1,7 @@
 package ru.yandex.practicum.filmorate.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.User;
@@ -11,12 +11,15 @@ import java.util.*;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class UserService {
+
+    public UserService(@Qualifier("userDbStorage") UserStorage userStorage, ValidationService validationService) {
+        this.userStorage = userStorage;
+        this.validationService = validationService;
+    }
 
     private final UserStorage userStorage;
     private final ValidationService validationService;
-    private long count = 1;
 
     public List<User> getUsers() {
         return userStorage.getAll();
@@ -28,7 +31,6 @@ public class UserService {
 
     public User create(User user) {
         setNameFromLoginIfBlank(user);
-        user.setId(count++);
         userStorage.save(user);
         log.debug("Пользователь успешно добавлен в список");
         return user;
@@ -48,13 +50,9 @@ public class UserService {
         User user = validationService.getUserOrThrow(id);
         User friend = validationService.getUserOrThrow(friendId);
         if (id == friendId) {
-            log.warn("Попытка добавить самого себя в друзья");
             throw new ValidationException("Нельзя добавить самого себя в друзья");
         }
-        if (user.getFriendsIds().contains(friendId) || friend.getFriendsIds().contains(id)) {
-            log.warn("Попытка добавить одного и того же пользователя в друзья дважды");
-            throw new ValidationException("Пользователи уже друзья");
-        }
+        userStorage.addFriendship(user.getId(), friend.getId());
         user.addFriendId(friendId);
         friend.addFriendId(id);
         userStorage.save(user);
@@ -66,14 +64,12 @@ public class UserService {
         User user = validationService.getUserOrThrow(id);
         User friend = validationService.getUserOrThrow(friendId);
 
-        if (!user.getFriendsIds().contains(friendId) || !friend.getFriendsIds().contains(id)) {
-            log.debug("Попытка разорвать дружбу между {} и {} - операция проигнорирована", id, friendId);
+        if (!userStorage.getAllFriends(user).contains(friend)) {
+            log.warn("Попытка удалить друга {} у пользователя {} - операция проигнорирована", friendId, id);
             return;
         }
-        user.removeFriendId(friendId);
-        friend.removeFriendId(id);
+        userStorage.removeFriendship(user.getId(), friend.getId());
         userStorage.save(user);
-        userStorage.save(friend);
         log.debug("Пользователь c id {} и {} больше не друзья", id, friendId);
     }
 
@@ -91,8 +87,18 @@ public class UserService {
         }
         User user = validationService.getUserOrThrow(id);
         User otherUser = validationService.getUserOrThrow(otherId);
-        Set<Long> setOfId = new HashSet<>(user.getFriendsIds());
-        setOfId.retainAll(otherUser.getFriendsIds());
+        List<Long> userFriends = userStorage.getAllFriends(user)
+                .stream()
+                .map(User::getId)
+                .toList();
+
+        List<Long> otherUserFriends = userStorage.getAllFriends(otherUser)
+                .stream()
+                .map(User::getId)
+                .toList();
+
+        Set<Long> setOfId = new HashSet<>(userFriends);
+        setOfId.retainAll(otherUserFriends);
         List<User> commonFriends = userStorage.getListOfUsers(new ArrayList<>(setOfId));
         log.debug("Получен список общих друзей пользователя {} с пользователем", id);
         if (commonFriends.isEmpty()) {

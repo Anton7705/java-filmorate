@@ -9,7 +9,9 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Data
@@ -30,6 +32,11 @@ public class Film {
     @Positive(message = "Продолжительность должна быть положительной")
     private double duration;
 
+    @NotNull
+    private Mpa mpa;
+
+    private List<Genre> genres = new ArrayList<>();
+
     private final Set<Long> likes = new HashSet<>();
 
     public void addLike(long userId) {
@@ -45,5 +52,9 @@ public class Film {
 
     public int likesCount() {
         return likes.size();
+    }
+
+    public void setGenres(List<Genre> genres) {
+        this.genres = genres != null ? genres : new ArrayList<>();
     }
 }
