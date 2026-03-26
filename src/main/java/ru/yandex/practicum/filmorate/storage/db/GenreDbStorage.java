@@ -44,8 +44,7 @@ public class GenreDbStorage extends BaseRepository<Genre> implements DictionaryS
             return Collections.emptyList();
         }
 
-        Map<String, Object> params = new HashMap<>();
-        params.put("ids", ids);
+        Map<String, Object> params = Map.of("ids", ids);
         return namedParameterJdbcTemplate.query(FIND_BY_IDS_QUERY, params, mapper);
     }
 

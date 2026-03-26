@@ -43,12 +43,12 @@ public class UserService {
     }
 
     public void addFriend(long id, long friendId) {
-        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
-        User user = users.get(id);
-        User friend = users.get(friendId);
         if (id == friendId) {
             throw new ValidationException("Нельзя добавить самого себя в друзья");
         }
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
+        User user = users.get(id);
+        User friend = users.get(friendId);
         userStorage.addFriendship(user.getId(), friend.getId());
         log.debug("Пользователь c id {} и {} теперь друзья", id, friendId);
     }
