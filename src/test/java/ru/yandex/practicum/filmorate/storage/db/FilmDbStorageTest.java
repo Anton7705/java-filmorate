@@ -69,22 +69,6 @@ public class FilmDbStorageTest {
     }
 
     @Test
-    void shouldSaveAndLoadGenres() {
-        Film film = createTestFilm();
-        Genre genre1 = Genre.builder().id(1).name("Комедия").build();
-        Genre genre2 = Genre.builder().id(2).name("Драма").build();
-        film.setGenres(List.of(genre1, genre2));
-
-        filmStorage.save(film);
-
-        Optional<Film> found = filmStorage.findById(film.getId());
-        assertThat(found).isPresent();
-        assertThat(found.get().getGenres()).hasSize(2);
-        assertThat(found.get().getGenres().get(0).getId()).isEqualTo(1);
-        assertThat(found.get().getGenres().get(1).getId()).isEqualTo(2);
-    }
-
-    @Test
     void shouldAddAndRemoveLike() {
         Film film = createTestFilm();
         filmStorage.save(film);

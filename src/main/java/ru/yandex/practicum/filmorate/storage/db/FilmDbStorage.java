@@ -6,7 +6,6 @@ import org.springframework.stereotype.Repository;
 import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
-import ru.yandex.practicum.filmorate.storage.db.rowmapper.GenreRowMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,32 +90,17 @@ public class FilmDbStorage extends BaseRepository<Film> implements FilmStorage {
 
     @Override
     public List<Film> getAll() {
-        List<Film> films = findMany(FIND_ALL_FILMS_QUERY);
-        for (Film film : films) {
-            List<Genre> genres = loadGenres(film.getId());
-            film.setGenres(genres);
-        }
-        return films;
+        return findMany(FIND_ALL_FILMS_QUERY);
     }
 
     @Override
     public Optional<Film> findById(long id) {
-        Optional<Film> filmOpt = findOne(FIND_FILM_BY_ID_QUERY, id);
-        filmOpt.ifPresent(film -> {
-            List<Genre> genres = loadGenres(film.getId());
-            film.setGenres(genres);
-        });
-        return filmOpt;
+        return findOne(FIND_FILM_BY_ID_QUERY, id);
     }
 
     @Override
     public List<Film> getMostPopular(int count) {
-        List<Film> films = findMany(GET_POPULAR_QUERY, count);
-        for (Film film : films) {
-            List<Genre> genres = loadGenres(film.getId());
-            film.setGenres(genres);
-        }
-        return films;
+        return findMany(GET_POPULAR_QUERY, count);
     }
 
     @Override
@@ -132,13 +116,5 @@ public class FilmDbStorage extends BaseRepository<Film> implements FilmStorage {
         if (count == 0) {
             jdbc.update(INSERT_LIKE_QUERY, film.getId(), userId);
         }
-    }
-
-    private List<Genre> loadGenres(long filmId) {
-        if (filmId == 0) {
-            return new ArrayList<>();
-        }
-        return jdbc.query(FIND_GENRES_BY_FILM_ID_QUERY,
-                new GenreRowMapper(), filmId);
     }
 }

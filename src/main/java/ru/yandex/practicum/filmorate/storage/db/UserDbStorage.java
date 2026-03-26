@@ -10,7 +10,10 @@ import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Repository
 public class UserDbStorage extends BaseRepository<User> implements UserStorage {
@@ -63,6 +66,13 @@ public class UserDbStorage extends BaseRepository<User> implements UserStorage {
     @Override
     public Optional<User> findById(long id) {
         return findOne(FIND_USER_BY_ID_QUERY, id);
+    }
+
+    public Map<Long, User> getUsersMapByIds(List<Long> ids) {
+        List<User> users = getListOfUsers(ids);
+
+        return users.stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
     }
 
     @Override

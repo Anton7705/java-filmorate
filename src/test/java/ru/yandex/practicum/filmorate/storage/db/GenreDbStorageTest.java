@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.storage.db.rowmapper.GenreRowMapper;
@@ -23,11 +24,14 @@ class GenreDbStorageTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
     private GenreDbStorage genreStorage;
 
     @BeforeEach
     void setUp() {
-        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper());
+        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper(), namedParameterJdbcTemplate);
     }
 
     @Test

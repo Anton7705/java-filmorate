@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
@@ -28,6 +29,9 @@ class UserServiceTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
     private UserService userService;
     private ValidationService validationService;
     private UserDbStorage userStorage;
@@ -43,7 +47,7 @@ class UserServiceTest {
         filmStorage = new FilmDbStorage(jdbcTemplate, new FilmRowMapper());
         userStorage = new UserDbStorage(jdbcTemplate, new UserRowMapper());
         mpaStorage = new MpaDbStorage(jdbcTemplate, new MpaRowMapper());
-        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper());
+        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper(), namedParameterJdbcTemplate);
 
         validationService = new ValidationService(userStorage, filmStorage, mpaStorage, genreStorage);
         userService = new UserService(userStorage, validationService);

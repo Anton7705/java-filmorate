@@ -1,7 +1,7 @@
 package ru.yandex.practicum.filmorate.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.User;
@@ -11,12 +11,8 @@ import java.util.*;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class UserService {
-
-    public UserService(@Qualifier("userDbStorage") UserStorage userStorage, ValidationService validationService) {
-        this.userStorage = userStorage;
-        this.validationService = validationService;
-    }
 
     private final UserStorage userStorage;
     private final ValidationService validationService;
@@ -47,29 +43,26 @@ public class UserService {
     }
 
     public void addFriend(long id, long friendId) {
-        User user = validationService.getUserOrThrow(id);
-        User friend = validationService.getUserOrThrow(friendId);
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
+        User user = users.get(id);
+        User friend = users.get(friendId);
         if (id == friendId) {
             throw new ValidationException("Нельзя добавить самого себя в друзья");
         }
         userStorage.addFriendship(user.getId(), friend.getId());
-        user.addFriendId(friendId);
-        friend.addFriendId(id);
-        userStorage.save(user);
-        userStorage.save(friend);
         log.debug("Пользователь c id {} и {} теперь друзья", id, friendId);
     }
 
     public void deleteFriend(long id, long friendId) {
-        User user = validationService.getUserOrThrow(id);
-        User friend = validationService.getUserOrThrow(friendId);
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
+        User user = users.get(id);
+        User friend = users.get(friendId);
 
         if (!userStorage.getAllFriends(user).contains(friend)) {
             log.warn("Попытка удалить друга {} у пользователя {} - операция проигнорирована", friendId, id);
             return;
         }
         userStorage.removeFriendship(user.getId(), friend.getId());
-        userStorage.save(user);
         log.debug("Пользователь c id {} и {} больше не друзья", id, friendId);
     }
 
@@ -85,8 +78,9 @@ public class UserService {
             log.warn("Попытка запросить общих друзей у самого себя");
             throw new ValidationException("Нельзя запросить общих друзей у самого себя");
         }
-        User user = validationService.getUserOrThrow(id);
-        User otherUser = validationService.getUserOrThrow(otherId);
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, otherId));
+        User user = users.get(id);
+        User otherUser = users.get(otherId);
         List<Long> userFriends = userStorage.getAllFriends(user)
                 .stream()
                 .map(User::getId)
