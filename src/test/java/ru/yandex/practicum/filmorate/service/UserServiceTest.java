@@ -3,36 +3,60 @@ package ru.yandex.practicum.filmorate.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.test.context.jdbc.Sql;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.User;
-import ru.yandex.practicum.filmorate.storage.FilmStorage;
-import ru.yandex.practicum.filmorate.storage.InMemoryFilmStorage;
-import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
-import ru.yandex.practicum.filmorate.storage.UserStorage;
+import ru.yandex.practicum.filmorate.storage.db.*;
+import ru.yandex.practicum.filmorate.storage.db.rowmapper.*;
 
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
+@JdbcTest
+@AutoConfigureTestDatabase
+@Sql(scripts = {"/schema.sql", "/data.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 class UserServiceTest {
 
-    private static UserService userService;
-    private static User correctUser;
-    private static LocalDate birthday = LocalDate.of(1990, 1, 1);
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    private UserService userService;
+    private ValidationService validationService;
+    private UserDbStorage userStorage;
+    private FilmDbStorage filmStorage;
+    private MpaDbStorage mpaStorage;
+    private GenreDbStorage genreStorage;
+
+    private User correctUser;
 
     @BeforeEach
-    void setup() {
-        FilmStorage filmStorage = new InMemoryFilmStorage();
-        UserStorage userStorage = new InMemoryUserStorage();
-        ValidationService validationService = new ValidationService(userStorage, filmStorage);
+    void setUp() {
+        // Инициализация хранилищ
+        filmStorage = new FilmDbStorage(jdbcTemplate, new FilmRowMapper());
+        userStorage = new UserDbStorage(jdbcTemplate, new UserRowMapper());
+        mpaStorage = new MpaDbStorage(jdbcTemplate, new MpaRowMapper());
+        genreStorage = new GenreDbStorage(jdbcTemplate, new GenreRowMapper(), namedParameterJdbcTemplate);
+
+        validationService = new ValidationService(userStorage, filmStorage, mpaStorage, genreStorage);
         userService = new UserService(userStorage, validationService);
+
         correctUser = User.builder()
                 .email("mail@mail.ru")
                 .login("login")
                 .name("name")
-                .birthday(birthday)
+                .birthday(LocalDate.of(1990, 1, 1))
                 .build();
     }
 
@@ -40,7 +64,7 @@ class UserServiceTest {
     @DisplayName("Присвоение ID новому пользователю")
     void shouldAssignIdWhenCreatingUser() {
         userService.create(correctUser);
-        assertEquals(correctUser.getId(), 1);
+        assertThat(correctUser.getId()).isPositive();
     }
 
     @Test
@@ -48,8 +72,16 @@ class UserServiceTest {
     void shouldSaveUserWhenDataIsValid() {
         User created = userService.create(correctUser);
 
-        assertTrue(userService.getUsers().contains(created));
-        assertEquals(1, userService.getUsers().size());
+        List<User> users = userService.getUsers();
+
+        assertThat(users)
+                .hasSize(1)
+                .first()
+                .satisfies(user -> {
+                    assertThat(user.getId()).isEqualTo(created.getId());
+                    assertThat(user.getEmail()).isEqualTo("mail@mail.ru");
+                    assertThat(user.getLogin()).isEqualTo("login");
+                });
     }
 
     @Test
@@ -59,36 +91,40 @@ class UserServiceTest {
                 .email("mail@mail.ru")
                 .login("login")
                 .name("")
-                .birthday(birthday)
+                .birthday(LocalDate.of(1990, 1, 1))
                 .build();
         User userWithNullName = User.builder()
                 .email("mail@mail.ru")
                 .login("login")
                 .name(null)
-                .birthday(birthday)
+                .birthday(LocalDate.of(1990, 1, 1))
                 .build();
 
         User createdWithBlankName = userService.create(userWithBlankName);
         User createdWithNullName = userService.create(userWithNullName);
 
-        assertEquals("login", createdWithBlankName.getName());
-        assertEquals("login", createdWithNullName.getName());
+        assertThat(createdWithBlankName.getName()).isEqualTo("login");
+        assertThat(createdWithNullName.getName()).isEqualTo("login");
     }
 
     @Test
     @DisplayName("Обновление пользователя: данные успешно обновляются")
     void shouldUpdateUserSuccessfully() {
-        userService.create(correctUser);
-        long id = correctUser.getId();
+        User created = userService.create(correctUser);
+        long id = created.getId();
+
         User userToUpdate = User.builder()
                 .email("new@mail.ru")
                 .login("newlogin")
                 .name("NewName")
                 .birthday(LocalDate.of(1985, 5, 15))
                 .build();
+
         User updatedUser = userService.update(id, userToUpdate);
-        assertEquals(userToUpdate.getEmail(), updatedUser.getEmail());
-        assertEquals(userToUpdate.getLogin(), updatedUser.getLogin());
+
+        assertThat(updatedUser.getEmail()).isEqualTo("new@mail.ru");
+        assertThat(updatedUser.getLogin()).isEqualTo("newlogin");
+        assertThat(updatedUser.getName()).isEqualTo("NewName");
     }
 
     @Test
@@ -98,10 +134,11 @@ class UserServiceTest {
                 .email("mail@mail.ru")
                 .login("login")
                 .name("name")
-                .birthday(birthday)
+                .birthday(LocalDate.of(1990, 1, 1))
                 .build();
 
-        assertThrows(NotFoundException.class, () -> userService.update(999L, userToUpdate));
+        assertThrows(NotFoundException.class,
+                () -> userService.update(999L, userToUpdate));
     }
 
     @Test
@@ -120,16 +157,16 @@ class UserServiceTest {
         List<User> user1Friends = userService.getAllUsersFriends(user1.getId());
         List<User> user2Friends = userService.getAllUsersFriends(user2.getId());
 
-        assertEquals(1, user1Friends.size());
-        assertEquals(1, user2Friends.size());
-        assertEquals(user2.getId(), user1Friends.get(0).getId());
-        assertEquals(user1.getId(), user2Friends.get(0).getId());
+        assertThat(user1Friends).hasSize(1);
+        assertThat(user1Friends.get(0).getId()).isEqualTo(user2.getId());
+        assertThat(user2Friends).isEmpty();  // односторонняя дружба
     }
 
     @Test
     @DisplayName("Добавление в друзья: попытка добавить себя -> исключение")
     void shouldThrowExceptionWhenAddingSelfAsFriend() {
         User user = userService.create(correctUser);
+
         assertThrows(ValidationException.class,
                 () -> userService.addFriend(user.getId(), user.getId()));
     }
@@ -177,8 +214,8 @@ class UserServiceTest {
         List<User> user1Friends = userService.getAllUsersFriends(user1.getId());
         List<User> user2Friends = userService.getAllUsersFriends(user2.getId());
 
-        assertTrue(user1Friends.isEmpty());
-        assertTrue(user2Friends.isEmpty());
+        assertThat(user1Friends).isEmpty();
+        assertThat(user2Friends).isEmpty();
     }
 
     @Test
@@ -195,7 +232,7 @@ class UserServiceTest {
         assertDoesNotThrow(() -> userService.deleteFriend(user1.getId(), user2.getId()));
 
         List<User> user1Friends = userService.getAllUsersFriends(user1.getId());
-        assertTrue(user1Friends.isEmpty());
+        assertThat(user1Friends).isEmpty();
     }
 
     @Test
@@ -205,7 +242,7 @@ class UserServiceTest {
 
         List<User> friends = userService.getAllUsersFriends(user.getId());
 
-        assertTrue(friends.isEmpty());
+        assertThat(friends).isEmpty();
     }
 
     @Test
@@ -237,8 +274,8 @@ class UserServiceTest {
 
         List<User> commonFriends = userService.getAllUsersCommonFriends(user1.getId(), user2.getId());
 
-        assertEquals(1, commonFriends.size());
-        assertEquals(commonFriend.getId(), commonFriends.get(0).getId());
+        assertThat(commonFriends).hasSize(1);
+        assertThat(commonFriends.get(0).getId()).isEqualTo(commonFriend.getId());
     }
 
     @Test
@@ -269,7 +306,7 @@ class UserServiceTest {
 
         List<User> commonFriends = userService.getAllUsersCommonFriends(user1.getId(), user2.getId());
 
-        assertTrue(commonFriends.isEmpty());
+        assertThat(commonFriends).isEmpty();
     }
 
     @Test
@@ -288,8 +325,8 @@ class UserServiceTest {
 
         User found = userService.getUser(created.getId());
 
-        assertEquals(created.getId(), found.getId());
-        assertEquals(created.getEmail(), found.getEmail());
+        assertThat(found.getId()).isEqualTo(created.getId());
+        assertThat(found.getEmail()).isEqualTo(created.getEmail());
     }
 
     @Test

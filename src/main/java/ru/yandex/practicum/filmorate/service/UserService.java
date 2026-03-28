@@ -16,7 +16,6 @@ public class UserService {
 
     private final UserStorage userStorage;
     private final ValidationService validationService;
-    private long count = 1;
 
     public List<User> getUsers() {
         return userStorage.getAll();
@@ -28,7 +27,6 @@ public class UserService {
 
     public User create(User user) {
         setNameFromLoginIfBlank(user);
-        user.setId(count++);
         userStorage.save(user);
         log.debug("Пользователь успешно добавлен в список");
         return user;
@@ -45,35 +43,26 @@ public class UserService {
     }
 
     public void addFriend(long id, long friendId) {
-        User user = validationService.getUserOrThrow(id);
-        User friend = validationService.getUserOrThrow(friendId);
         if (id == friendId) {
-            log.warn("Попытка добавить самого себя в друзья");
             throw new ValidationException("Нельзя добавить самого себя в друзья");
         }
-        if (user.getFriendsIds().contains(friendId) || friend.getFriendsIds().contains(id)) {
-            log.warn("Попытка добавить одного и того же пользователя в друзья дважды");
-            throw new ValidationException("Пользователи уже друзья");
-        }
-        user.addFriendId(friendId);
-        friend.addFriendId(id);
-        userStorage.save(user);
-        userStorage.save(friend);
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
+        User user = users.get(id);
+        User friend = users.get(friendId);
+        userStorage.addFriendship(user.getId(), friend.getId());
         log.debug("Пользователь c id {} и {} теперь друзья", id, friendId);
     }
 
     public void deleteFriend(long id, long friendId) {
-        User user = validationService.getUserOrThrow(id);
-        User friend = validationService.getUserOrThrow(friendId);
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, friendId));
+        User user = users.get(id);
+        User friend = users.get(friendId);
 
-        if (!user.getFriendsIds().contains(friendId) || !friend.getFriendsIds().contains(id)) {
-            log.debug("Попытка разорвать дружбу между {} и {} - операция проигнорирована", id, friendId);
+        if (!userStorage.getAllFriends(user).contains(friend)) {
+            log.warn("Попытка удалить друга {} у пользователя {} - операция проигнорирована", friendId, id);
             return;
         }
-        user.removeFriendId(friendId);
-        friend.removeFriendId(id);
-        userStorage.save(user);
-        userStorage.save(friend);
+        userStorage.removeFriendship(user.getId(), friend.getId());
         log.debug("Пользователь c id {} и {} больше не друзья", id, friendId);
     }
 
@@ -89,10 +78,21 @@ public class UserService {
             log.warn("Попытка запросить общих друзей у самого себя");
             throw new ValidationException("Нельзя запросить общих друзей у самого себя");
         }
-        User user = validationService.getUserOrThrow(id);
-        User otherUser = validationService.getUserOrThrow(otherId);
-        Set<Long> setOfId = new HashSet<>(user.getFriendsIds());
-        setOfId.retainAll(otherUser.getFriendsIds());
+        Map<Long, User> users = userStorage.getUsersMapByIds(List.of(id, otherId));
+        User user = users.get(id);
+        User otherUser = users.get(otherId);
+        List<Long> userFriends = userStorage.getAllFriends(user)
+                .stream()
+                .map(User::getId)
+                .toList();
+
+        List<Long> otherUserFriends = userStorage.getAllFriends(otherUser)
+                .stream()
+                .map(User::getId)
+                .toList();
+
+        Set<Long> setOfId = new HashSet<>(userFriends);
+        setOfId.retainAll(otherUserFriends);
         List<User> commonFriends = userStorage.getListOfUsers(new ArrayList<>(setOfId));
         log.debug("Получен список общих друзей пользователя {} с пользователем", id);
         if (commonFriends.isEmpty()) {
